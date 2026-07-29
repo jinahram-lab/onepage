@@ -21,7 +21,9 @@ export type SavedReport = {
 };
 
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Supabase now labels the browser-safe key as PUBLISHABLE_KEY.
+// Keep ANON_KEY as a backwards-compatible fallback for existing deployments.
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const supabaseConfigured = Boolean(baseUrl && anonKey);
 

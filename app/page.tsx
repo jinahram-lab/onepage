@@ -1,116 +1,65 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type Result = {
-  id: string;
-  studentIdentifier: string;
-  grade: string;
-  term: string;
-  subject: string;
-  finalText: string;
-  source: string;
-  createdAt: string;
-  status: "검토 완료" | "확인 필요";
-};
+type Point = { x: string; y: string };
 
-const subjects = ["과학", "국어", "수학", "영어", "사회", "정보", "미술", "체육"];
-const sample = "온도 변화 실험에서 측정값을 표로 정리하고 그래프의 축과 단위를 확인함. 예상과 다른 결과가 나온 원인을 측정 시점과 측정 도구의 오차 가능성으로 설명함.";
+const initialRows: Point[] = [
+  { x: "10.0", y: "1.0" }, { x: "15.0", y: "1.2" }, { x: "20.0", y: "1.8" },
+  { x: "25.0", y: "2.7" }, { x: "30.0", y: "3.5" }, { x: "35.0", y: "4.2" },
+];
 
-function buildDraft(subject: string, activity: string, observation: string, grade: string) {
-  const body = observation.trim() || activity.trim() || "학생 활동 내용을 입력해 주세요.";
-  return `${subject} 수업에서 ${body} 이를 바탕으로 자료를 정리하고 결과를 해석하는 과정에서 자신의 생각을 구체적으로 표현함. 활동 과정에서 확인한 근거를 중심으로 탐구 내용을 정리하려는 태도가 나타남.`;
+function toNumber(value: string) { return Number(value.trim()); }
+function usableRows(rows: Point[]) { return rows.filter((row) => Number.isFinite(toNumber(row.x)) && Number.isFinite(toNumber(row.y))); }
+
+function Graph({ points, xName, yName, xUnit, yUnit, connected = true, compact = false }: { points: Point[]; xName: string; yName: string; xUnit: string; yUnit: string; connected?: boolean; compact?: boolean }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current; if (!canvas) return;
+    const ratio = window.devicePixelRatio || 1; const width = canvas.clientWidth; const height = canvas.clientHeight;
+    canvas.width = width * ratio; canvas.height = height * ratio;
+    const ctx = canvas.getContext("2d"); if (!ctx) return; ctx.scale(ratio, ratio); ctx.clearRect(0, 0, width, height);
+    const left = compact ? 42 : 54, right = 20, top = 24, bottom = compact ? 32 : 46;
+    const chartWidth = width - left - right, chartHeight = height - top - bottom;
+    const xs = points.map((p) => toNumber(p.x)), ys = points.map((p) => toNumber(p.y));
+    const minX = xs.length ? Math.min(...xs) : 0, maxX = xs.length ? Math.max(...xs) : 10;
+    const minY = ys.length ? Math.min(...ys) : 0, maxY = ys.length ? Math.max(...ys) : 10;
+    const xPad = Math.max((maxX - minX) * .08, 1), yPad = Math.max((maxY - minY) * .14, 1);
+    const x0 = minX - xPad, x1 = maxX + xPad, y0 = Math.min(0, minY - yPad), y1 = maxY + yPad;
+    const px = (x: number) => left + ((x - x0) / (x1 - x0)) * chartWidth;
+    const py = (y: number) => top + chartHeight - ((y - y0) / (y1 - y0)) * chartHeight;
+    ctx.font = `${compact ? 10 : 12}px Arial`; ctx.strokeStyle = "#e3eaf4"; ctx.fillStyle = "#718096"; ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i += 1) {
+      const gx = left + chartWidth * i / 5, gy = top + chartHeight * i / 5;
+      ctx.beginPath(); ctx.moveTo(gx, top); ctx.lineTo(gx, top + chartHeight); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(left, gy); ctx.lineTo(left + chartWidth, gy); ctx.stroke();
+      ctx.fillText((x0 + (x1 - x0) * i / 5).toFixed(1), gx - 10, top + chartHeight + (compact ? 16 : 20));
+      ctx.fillText((y1 - (y1 - y0) * i / 5).toFixed(1), 4, gy + 4);
+    }
+    ctx.strokeStyle = "#3b69d9"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + chartHeight); ctx.lineTo(left + chartWidth, top + chartHeight); ctx.stroke();
+    if (connected && points.length) { ctx.beginPath(); points.forEach((p, i) => i ? ctx.lineTo(px(toNumber(p.x)), py(toNumber(p.y))) : ctx.moveTo(px(toNumber(p.x)), py(toNumber(p.y)))); ctx.strokeStyle = "#3b69d9"; ctx.lineWidth = 2.2; ctx.stroke(); }
+    points.forEach((p) => { ctx.beginPath(); ctx.arc(px(toNumber(p.x)), py(toNumber(p.y)), compact ? 3.5 : 5, 0, Math.PI * 2); ctx.fillStyle = "#3b69d9"; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke(); });
+    ctx.fillStyle = "#41536f"; ctx.font = `600 ${compact ? 10 : 12}px Arial`; ctx.fillText(`${yName || "종속 변인"}${yUnit ? ` (${yUnit})` : ""}`, left, 14); ctx.fillText(`${xName || "독립 변인"}${xUnit ? ` (${xUnit})` : ""}`, Math.max(left, width / 2 - 40), height - 7);
+  }, [points, xName, yName, xUnit, yUnit, connected, compact]);
+  return <canvas ref={ref} className={compact ? "graph-canvas compact" : "graph-canvas"} aria-label="실험 데이터 그래프" />;
 }
 
 export default function Home() {
-  const [view, setView] = useState<"write" | "history" | "settings">("write");
-  const [grade, setGrade] = useState("중학교 2학년");
-  const [term, setTerm] = useState("2026학년도 1학기");
-  const [subject, setSubject] = useState("과학");
-  const [student, setStudent] = useState("STU-001");
-  const [activity, setActivity] = useState("온도 변화 측정, 실험 결과 표 작성, 그래프 작성, 오차 원인 분석");
-  const [observation, setObservation] = useState(sample);
-  const [activityType, setActivityType] = useState("탐구·실험");
-  const [teacherNote, setTeacherNote] = useState("");
-  const [model, setModel] = useState("Gemini 3.5 Flash-Lite");
-  const [apiKey, setApiKey] = useState("");
-  const [stage, setStage] = useState(0);
-  const [result, setResult] = useState<Result | null>(null);
-  const [history, setHistory] = useState<Result[]>([]);
-  const [notice, setNotice] = useState("");
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem("tamgu-history");
-    if (saved) setHistory(JSON.parse(saved));
-  }, []);
-
-  const ready = useMemo(() => student.trim() && (activity.trim() || observation.trim()), [student, activity, observation]);
-
-  const generate = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!ready) { setNotice("학생 식별값과 활동 내용 또는 관찰 내용을 입력해 주세요."); return; }
-    setNotice(""); setStage(1); setResult(null);
-    window.setTimeout(() => setStage(2), 450);
-    window.setTimeout(() => setStage(3), 900);
-    window.setTimeout(() => {
-      const draft = buildDraft(subject, activity, observation, grade);
-      setResult({ id: crypto.randomUUID(), studentIdentifier: student, grade, term, subject, finalText: draft, source: `${activity}${teacherNote ? ` / ${teacherNote}` : ""}`, createdAt: new Date().toISOString(), status: "검토 완료" });
-      setStage(4);
-    }, 1450);
-  };
-
-  const saveResult = () => {
-    if (!result) return;
-    const next = [result, ...history];
-    setHistory(next); window.localStorage.setItem("tamgu-history", JSON.stringify(next));
-    setNotice("결과가 저장되었습니다. 저장 내역에서 다시 확인할 수 있습니다.");
-  };
-
-  const reset = () => { setResult(null); setStage(0); setNotice(""); };
-
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <button className="brand" onClick={() => { setView("write"); reset(); }}><span className="brand-mark">탐</span><span>탐구한장</span></button>
-        <div className="topbar-actions"><span className="secure-pill"><i /> 교사 작업공간</span><button className="avatar" onClick={() => setView("settings")}>김</button></div>
-      </header>
-
-      <div className="app-grid">
-        <aside className="sidebar">
-          <div className="workspace-label">MY WORKSPACE</div>
-          <nav>
-            <button className={view === "write" ? "nav-item active" : "nav-item"} onClick={() => setView("write")}><span>✦</span> 세특 초안 만들기</button>
-            <button className={view === "history" ? "nav-item active" : "nav-item"} onClick={() => setView("history")}><span>▤</span> 저장 내역 <em>{history.length || ""}</em></button>
-          </nav>
-          <div className="sidebar-divider" />
-          <button className={view === "settings" ? "nav-item active" : "nav-item"} onClick={() => setView("settings")}><span>⚙</span> 개인 설정</button>
-          <div className="sidebar-bottom"><div className="tip-icon">i</div><p><strong>작성 팁</strong><br />관찰한 행동과 활동 과정을 구체적으로 적을수록 더 자연스러운 초안이 만들어져요.</p></div>
-        </aside>
-
-        <section className="content">
-          {view === "write" && <>
-            <div className="page-heading"><div><div className="eyebrow">INPUT → PROCESS → OUTPUT</div><h1>세특 초안 만들기</h1><p>학생의 활동을 정리하고, 과목별 문구를 한 장씩 완성해 보세요.</p></div><div className="heading-badge"><span>AI 3단계 검토</span><small>수집 · 작성 · 검토</small></div></div>
-            <div className="stepper"><div className="step active"><b>1</b><span>활동 입력</span></div><div className={stage > 0 ? "step active" : "step"}><b>2</b><span>AI 에이전트 작업</span></div><div className={stage === 4 ? "step active" : "step"}><b>3</b><span>결과 확인</span></div></div>
-            {notice && <div className="notice">{notice}</div>}
-            {!result ? <form className="form-layout" onSubmit={generate}>
-              <div className="card form-card"><div className="card-title"><span className="number">01</span><div><h2>기본 정보</h2><p>어떤 학생의 어떤 과목 기록인지 알려주세요.</p></div></div><div className="field-grid"><label>학생 식별값<input value={student} onChange={e => setStudent(e.target.value)} placeholder="예: STU-001" /></label><label>학년<select value={grade} onChange={e => setGrade(e.target.value)}><option>중학교 1학년</option><option>중학교 2학년</option><option>중학교 3학년</option><option>고등학교 1학년</option><option>고등학교 2학년</option><option>고등학교 3학년</option></select></label><label>과목<select value={subject} onChange={e => setSubject(e.target.value)}>{subjects.map(s => <option key={s}>{s}</option>)}</select></label><label>기간<input value={term} onChange={e => setTerm(e.target.value)} /></label></div></div>
-              <div className="card form-card"><div className="card-title"><span className="number">02</span><div><h2>학생 활동과 관찰 내용</h2><p>관찰한 행동, 사용한 방법, 학생의 말과 결과를 중심으로 입력하세요.</p></div></div><label>활동 키워드<textarea value={activity} onChange={e => setActivity(e.target.value)} placeholder="예: 토론 참여, 자료 조사, 실험 설계" /></label><div className="inline-label"><label>활동 유형<select value={activityType} onChange={e => setActivityType(e.target.value)}><option>탐구·실험</option><option>발표·토론</option><option>프로젝트</option><option>협력 활동</option><option>수업 참여</option></select></label><button type="button" className="ghost-button" onClick={() => { setActivity("온도 변화 측정, 실험 결과 표 작성, 그래프 작성, 오차 원인 분석"); setObservation(sample); }}>예시 입력</button></div><label>교사 관찰 내용<textarea className="large" value={observation} onChange={e => setObservation(e.target.value)} placeholder="학생이 실제로 한 행동과 그 과정에서 확인한 근거를 적어주세요." /></label><label>교사 추가 메모 <span className="optional">선택</span><input value={teacherNote} onChange={e => setTeacherNote(e.target.value)} placeholder="특히 살리고 싶은 과정이나 표현이 있다면 적어주세요." /></label><div className="form-footer"><span className="privacy-note">♧ 학생 이름 대신 식별값을 사용해 주세요.</span><button className="primary-button" disabled={!ready}>세특 초안 생성하기 <span>→</span></button></div></div>
-            </form> : <ResultPanel result={result} onSave={saveResult} onReset={reset} onChange={text => setResult({ ...result, finalText: text })} />}
-            {stage > 0 && stage < 4 && <div className="agent-strip"><div className={stage >= 1 ? "agent done" : "agent"}><b>01</b><span>수집 에이전트<small>활동 내용 구조화</small></span>{stage >= 1 && <i>✓</i>}</div><div className={stage >= 2 ? "agent done" : "agent"}><b>02</b><span>작성 에이전트<small>과목별 문구 작성</small></span>{stage >= 2 && <i>✓</i>}</div><div className={stage >= 3 ? "agent done" : "agent"}><b>03</b><span>검토 에이전트<small>표현 및 규정 점검</small></span>{stage >= 3 && <i>✓</i>}</div></div>}
-          </>}
-          {view === "history" && <History results={history} onOpen={r => { setResult(r); setView("write"); setStage(4); }} />}
-          {view === "settings" && <Settings model={model} apiKey={apiKey} setModel={setModel} setApiKey={setApiKey} />}
-        </section>
-      </div>
-      <footer>탐구한장 · AI가 만든 결과는 참고용 초안이며, 최종 기록 전 교사의 확인이 필요합니다.</footer>
-    </main>
-  );
+  const [step, setStep] = useState(1); const [title, setTitle] = useState("온도에 따른 물의 질량 변화"); const [student, setStudent] = useState("202470509"); const [purpose, setPurpose] = useState("온도에 따른 물의 질량 변화를 알아본다.");
+  const [xName, setXName] = useState("온도"); const [xUnit, setXUnit] = useState("℃"); const [yName, setYName] = useState("물의 질량"); const [yUnit, setYUnit] = useState("g"); const [rows, setRows] = useState<Point[]>(initialRows); const [connected, setConnected] = useState(true);
+  const [analysis, setAnalysis] = useState("온도가 높아질수록 물의 질량이 증가하는 경향이 나타났다."); const [principle, setPrinciple] = useState("온도 변화에 따라 물질의 성질과 상태가 달라질 수 있다."); const [errorCause, setErrorCause] = useState("온도계와 저울의 눈금을 읽는 과정에서 오차가 생겼을 수 있다."); const [conclusion, setConclusion] = useState("측정 결과 온도와 물의 질량 사이에 변화 관계가 있음을 확인했다."); const [notice, setNotice] = useState("");
+  const points = useMemo(() => usableRows(rows), [rows]);
+  const updateRow = (index: number, field: keyof Point, event: ChangeEvent<HTMLInputElement>) => setRows((current) => current.map((row, i) => i === index ? { ...row, [field]: event.target.value } : row));
+  const goGraph = () => { if (points.length < 2) { setNotice("그래프를 만들려면 숫자로 된 측정값을 2개 이상 입력해 주세요."); return; } setNotice(""); setStep(2); };
+  const updateFromResult = (field: "analysis" | "principle" | "errorCause" | "conclusion", value: string) => ({ analysis: setAnalysis, principle: setPrinciple, errorCause: setErrorCause, conclusion: setConclusion }[field])(value);
+  return <main className="lab-shell">
+    <header className="topbar"><button className="brand" onClick={() => { setStep(1); setNotice(""); }}><span className="brand-mark">탐</span><span>탐구한장</span></button><span className="topbar-sub">과학 실험 데이터 시각화 · 결과지 작성</span><button className="user-button">♙</button></header>
+    <section className="hero"><div><div className="eyebrow">SCIENCE EXPERIMENT REPORT</div><h1>실험 데이터를 한 장의<br /><em>탐구 결과지</em>로 완성해요.</h1><p>측정값을 입력하면 실제 수치 간격을 반영한 그래프가 만들어지고,<br />간단한 질문에 답하며 실험 결과를 정리할 수 있어요.</p></div><div className="hero-note"><span>INPUT → PROCESS → OUTPUT</span><strong>학생의 탐구가<br />한 장으로 정리됩니다.</strong></div></section>
+    <nav className="steps" aria-label="보고서 작성 단계"><button className={step === 1 ? "active" : step > 1 ? "done" : ""} onClick={() => step > 1 && setStep(1)}><b>1</b><span>실험 데이터 입력</span><small>측정값과 변인</small></button><i /><button className={step === 2 ? "active" : step > 2 ? "done" : ""} onClick={() => step > 2 && setStep(2)}><b>2</b><span>그래프 및 분석</span><small>변화 관계 해석</small></button><i /><button className={step === 3 ? "active" : ""} onClick={() => step === 3 && setStep(3)}><b>3</b><span>실험 결과지</span><small>한 장으로 완성</small></button></nav>
+    {notice && <p className="notice" role="alert">{notice}</p>}
+    {step === 1 && <section className="workspace two-col"><div className="card"><div className="section-title"><span>01</span><div><h2>기본 정보</h2><p>실험의 제목과 변인을 입력해 주세요.</p></div></div><label>실험 제목<input value={title} onChange={(e) => setTitle(e.target.value)} /></label><label>이름 / 식별번호<input value={student} onChange={(e) => setStudent(e.target.value)} /></label><label>실험 목적<textarea value={purpose} onChange={(e) => setPurpose(e.target.value)} /></label><div className="section-title compact-title"><span>02</span><div><h2>변인 설정</h2></div></div><div className="variable-grid"><label>독립 변인<input value={xName} onChange={(e) => setXName(e.target.value)} /></label><label>단위<input value={xUnit} onChange={(e) => setXUnit(e.target.value)} /></label><label>종속 변인<input value={yName} onChange={(e) => setYName(e.target.value)} /></label><label>단위<input value={yUnit} onChange={(e) => setYUnit(e.target.value)} /></label></div></div><div className="card"><div className="section-title"><span>03</span><div><h2>측정 데이터</h2><p>정수와 소수점 값을 그대로 입력해 주세요.</p></div></div><div className="table-wrap"><table><thead><tr><th>횟수</th><th>{xName || "X값"} ({xUnit})</th><th>{yName || "Y값"} ({yUnit})</th><th /></tr></thead><tbody>{rows.map((row, index) => <tr key={index}><td>{index + 1}</td><td><input inputMode="decimal" value={row.x} onChange={(e) => updateRow(index, "x", e)} /></td><td><input inputMode="decimal" value={row.y} onChange={(e) => updateRow(index, "y", e)} /></td><td>{rows.length > 2 && <button className="delete-row" onClick={() => setRows((current) => current.filter((_, i) => i !== index))}>×</button>}</td></tr>)}</tbody></table></div><div className="data-actions"><button className="secondary-button" onClick={() => setRows((current) => [...current, { x: "", y: "" }])}>＋ 행 추가</button><button className="primary-button" onClick={goGraph}>그래프 만들기 <span>→</span></button></div><div className="data-tip"><b>ⓘ</b><span><strong>소수점까지 정확하게 입력해 주세요!</strong><br />예: 10.0, 15.0, 1.2, 2.7처럼 실제 수치 간격으로 그래프에 표시됩니다.</span></div></div></section>}
+    {step === 2 && <section className="workspace graph-layout"><div className="card graph-panel"><div className="section-title"><span>01</span><div><h2>자동 생성된 그래프</h2><p>측정값 사이의 실제 간격을 반영한 산점도입니다.</p></div></div><div className="mini-table"><table><thead><tr><th>횟수</th><th>{xName} ({xUnit})</th><th>{yName} ({yUnit})</th></tr></thead><tbody>{points.map((p, i) => <tr key={i}><td>{i + 1}</td><td>{p.x}</td><td>{p.y}</td></tr>)}</tbody></table></div><div className="graph-options"><span>그래프 유형</span><label><input type="radio" checked={!connected} onChange={() => setConnected(false)} /> 점 그래프</label><label><input type="radio" checked={connected} onChange={() => setConnected(true)} /> 선 그래프</label></div><Graph points={points} xName={xName} yName={yName} xUnit={xUnit} yUnit={yUnit} connected={connected} /></div><div className="card analysis-panel"><div className="section-title"><span>02</span><div><h2>결과 분석</h2><p>그래프를 보고 질문에 답해 보세요.</p></div></div><label>결과 분석<textarea value={analysis} onChange={(e) => setAnalysis(e.target.value)} placeholder="그래프에서 어떤 변화가 보이나요?" /></label><label>과학적 원리<textarea value={principle} onChange={(e) => setPrinciple(e.target.value)} placeholder="이 결과와 관련된 과학적 원리는 무엇인가요?" /></label><label>오차 원인<textarea value={errorCause} onChange={(e) => setErrorCause(e.target.value)} placeholder="실험 결과에 영향을 준 오차 원인은 무엇인가요?" /></label><label>결론<textarea value={conclusion} onChange={(e) => setConclusion(e.target.value)} placeholder="실험을 통해 무엇을 알게 되었나요?" /></label><div className="data-actions"><button className="secondary-button" onClick={() => setStep(1)}>← 수정</button><button className="primary-button" onClick={() => setStep(3)}>결과지 미리보기 <span>→</span></button></div></div></section>}
+    {step === 3 && <section className="result-area"><div className="result-actions no-print"><button className="secondary-button" onClick={() => setStep(2)}>← 수정하기</button><button className="primary-button" onClick={() => window.print()}>인쇄 / PDF 저장 <span>▣</span></button></div><article className="report"><header><div className="report-kicker">탐구한장 · SCIENCE EXPERIMENT REPORT</div><h2>실험 결과지</h2><p>{student || "이름 / 식별번호"}</p></header><section><h3>1. 실험 제목</h3><p className="answer strong">{title || "실험 제목을 입력해 주세요."}</p></section><section><h3>2. 실험 목적</h3><p className="answer">{purpose || "실험 목적을 입력해 주세요."}</p></section><div className="report-grid"><section><h3>3. 실험 결과 표</h3><table><thead><tr><th>횟수</th><th>{xName} ({xUnit})</th><th>{yName} ({yUnit})</th></tr></thead><tbody>{points.map((p, i) => <tr key={i}><td>{i + 1}</td><td>{p.x}</td><td>{p.y}</td></tr>)}</tbody></table></section><section><h3>4. 그래프</h3><Graph points={points} xName={xName} yName={yName} xUnit={xUnit} yUnit={yUnit} connected={connected} compact /></section></div><section><h3>5. 결과 분석</h3><p className="answer">{analysis || "내용을 입력해 주세요."}</p></section><section><h3>6. 과학적 원리</h3><p className="answer">{principle || "내용을 입력해 주세요."}</p></section><section><h3>7. 오차 원인</h3><p className="answer">{errorCause || "내용을 입력해 주세요."}</p></section><section><h3>8. 결론</h3><p className="answer">{conclusion || "내용을 입력해 주세요."}</p></section></article></section>}
+    <footer>✣ 탐구한장 <span>한 장으로, 실험이 정리된다!</span><small>데이터 입력 → 자동 생성 → 한 장으로 완성</small></footer>
+  </main>;
 }
-
-function ResultPanel({ result, onSave, onReset, onChange }: { result: Result; onSave: () => void; onReset: () => void; onChange: (text: string) => void }) {
-  return <div className="result-wrap"><div className="result-header"><div><div className="eyebrow">OUTPUT · REVIEWED DRAFT</div><h2>검토가 끝났어요</h2><p>과목별로 확인하고 필요한 부분을 직접 다듬어 보세요.</p></div><span className="review-chip">✓ 검토 완료</span></div><div className="result-meta"><span><b>학생</b>{result.studentIdentifier}</span><span><b>학년</b>{result.grade}</span><span><b>과목</b>{result.subject}</span><span><b>생성일</b>{new Date(result.createdAt).toLocaleDateString("ko-KR")}</span></div><div className="result-card"><div className="result-card-top"><span className="subject-tag">{result.subject}</span><span className="draft-label">AI 초안 · 교사 확인 필요</span></div><textarea value={result.finalText} onChange={e => onChange(e.target.value)} /><div className="evidence"><b>검토 메모</b><span>입력된 관찰 내용을 기반으로 작성했으며, 비교·순위·단정적 표현을 사용하지 않았습니다.</span></div><div className="result-actions"><button className="secondary-button" onClick={() => navigator.clipboard?.writeText(result.finalText)}>문구 복사</button><button className="secondary-button" onClick={() => { const blob = new Blob([result.finalText], { type: "text/plain;charset=utf-8" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${result.subject}-세특-초안.txt`; a.click(); }}>TXT 다운로드</button><button className="secondary-button" onClick={onReset}>다시 작성</button><button className="primary-button" onClick={onSave}>Supabase에 저장 <span>→</span></button></div></div></div>;
-}
-
-function History({ results, onOpen }: { results: Result[]; onOpen: (result: Result) => void }) { return <div className="simple-page"><div className="page-heading"><div><div className="eyebrow">ARCHIVE</div><h1>저장 내역</h1><p>생성한 세특 초안을 다시 확인하고 이어서 수정할 수 있습니다.</p></div><span className="count-badge">{results.length}건</span></div><div className="history-card">{results.length === 0 ? <div className="empty"><span>▤</span><h3>아직 저장된 결과가 없어요</h3><p>세특 초안을 생성하고 저장하면 이곳에서 다시 볼 수 있습니다.</p></div> : results.map(r => <button className="history-row" key={r.id} onClick={() => onOpen(r)}><span className="subject-dot">{r.subject.slice(0, 1)}</span><span className="history-main"><b>{r.subject} · {r.studentIdentifier}</b><small>{r.grade} · {new Date(r.createdAt).toLocaleDateString("ko-KR")}</small></span><span className="history-preview">{r.finalText.slice(0, 58)}...</span><span className="arrow">→</span></button>)}</div></div>; }
-
-function Settings({ model, apiKey, setModel, setApiKey }: { model: string; apiKey: string; setModel: (value: string) => void; setApiKey: (value: string) => void }) { return <div className="simple-page"><div className="page-heading"><div><div className="eyebrow">PERSONAL SETTINGS</div><h1>개인 설정</h1><p>AI 초안 생성에 사용할 모델과 개인 환경을 설정하세요.</p></div></div><div className="settings-card"><div className="settings-section"><h2>Gemini 연결</h2><p>API Key는 브라우저에 저장하지 않고 서버 환경변수 또는 안전한 서버 저장소에서 관리하는 것을 권장합니다.</p><label>Gemini API Key<input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="AIza..." /></label><label>선호 모델<select value={model} onChange={e => setModel(e.target.value)}><option>Gemini 3.5 Flash-Lite</option><option>Gemini 2.5 Flash</option><option>Gemini 2.5 Pro</option></select></label><button className="primary-button" onClick={() => alert("개인 설정이 저장되었습니다.")}>설정 저장 <span>→</span></button></div><div className="settings-section muted-section"><h2>작성 원칙</h2><div className="rule"><span>✓</span> 관찰 사실과 해석을 구분합니다.</div><div className="rule"><span>✓</span> 비교·순위·과장 표현을 줄입니다.</div><div className="rule"><span>✓</span> 최종 기록 전 교사가 확인합니다.</div></div></div></div>; }

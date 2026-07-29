@@ -36,4 +36,8 @@ test("keeps product metadata and Supabase schema aligned", async () => {
   assert.match(page, /savedReports/);
   assert.match(page, /verifyStudentAccess/);
   assert.match(page, /student_access/);
+  assert.match(page, /signInTeacher/);
+  assert.match(page, /teacherReports/);
+  assert.match(schema, /create table if not exists public\.teacher_profiles/);
+  assert.match(schema, /Teachers can view all experiment reports/);
 });

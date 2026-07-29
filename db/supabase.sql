@@ -80,3 +80,21 @@ $$;
 
 grant execute on function public.verify_student_access(text, text)
 to anon, authenticated;
+
+-- 교사 Auth 계정과 교사 전용 조회 정책입니다.
+create table if not exists public.teacher_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  role text not null default 'teacher' check (role = 'teacher'),
+  created_at timestamptz not null default now()
+);
+
+alter table public.teacher_profiles enable row level security;
+drop policy if exists "Teachers can view their own profile" on public.teacher_profiles;
+create policy "Teachers can view their own profile" on public.teacher_profiles
+  for select to authenticated using (auth.uid() = user_id);
+
+drop policy if exists "Teachers can view all experiment reports" on public.experiment_reports;
+create policy "Teachers can view all experiment reports" on public.experiment_reports
+  for select to authenticated using (
+    exists (select 1 from public.teacher_profiles where user_id = auth.uid() and role = 'teacher')
+  );

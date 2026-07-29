@@ -20,6 +20,8 @@ export type SavedReport = {
   };
 };
 
+export type TeacherSession = { access_token: string; user: { id: string; email?: string } };
+
 const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // Supabase now labels the browser-safe key as PUBLISHABLE_KEY.
 // Keep ANON_KEY as a backwards-compatible fallback for existing deployments.
@@ -38,6 +40,23 @@ function endpoint(path: string) {
 
 function headers() {
   return { apikey: anonKey ?? "", Authorization: `Bearer ${anonKey ?? ""}`, "Content-Type": "application/json" };
+}
+
+function authEndpoint(path: string) {
+  if (!baseUrl || !anonKey) throw new Error("Supabase 환경변수가 설정되지 않았습니다.");
+  return `${baseUrl.replace(/\/$/, "")}/auth/v1/${path}`;
+}
+
+export async function signInTeacher(email: string, password: string) {
+  const response = await fetch(authEndpoint("token?grant_type=password"), { method: "POST", headers: headers(), body: JSON.stringify({ email, password }) });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<TeacherSession>;
+}
+
+export async function listTeacherReports(accessToken: string) {
+  const response = await fetch(endpoint("experiment_reports?select=*&order=created_at.desc"), { headers: { ...headers(), Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<SavedReport[]>;
 }
 
 export async function verifyStudentAccess(studentCode: string, pin: string) {

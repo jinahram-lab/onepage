@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { deleteReport, listReports, saveReport as saveReportToDb, supabaseConfigured, type SavedReport } from "../lib/supabase-rest";
+import { deleteReport, listReports, saveReport as saveReportToDb, supabaseConfigured, verifyStudentAccess, type SavedReport } from "../lib/supabase-rest";
 
 type Point = { x: string; y: string };
 type ChartType = "line" | "bar" | "pie" | "band" | "scatter";
@@ -43,6 +43,7 @@ export default function Home() {
   const [xName, setXName] = useState("시간"); const [xUnit, setXUnit] = useState("min"); const [yName, setYName] = useState("온도"); const [yUnit, setYUnit] = useState("℃"); const [rows, setRows] = useState<Point[]>(initialRows); const [chartType, setChartType] = useState<ChartType>("line");
   const [analysis, setAnalysis] = useState(""); const [principle, setPrinciple] = useState(""); const [errorCause, setErrorCause] = useState(""); const [conclusion, setConclusion] = useState(""); const [notice, setNotice] = useState("");
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]); const [showSaved, setShowSaved] = useState(false); const [dbBusy, setDbBusy] = useState(false);
+  const [verifiedStudent, setVerifiedStudent] = useState<string | null>(null); const [accessCode, setAccessCode] = useState(""); const [accessPin, setAccessPin] = useState(""); const [accessBusy, setAccessBusy] = useState(false); const [accessNotice, setAccessNotice] = useState("");
   const points = useMemo(() => validRows(rows), [rows]);
   const updateRow = (index: number, field: keyof Point, event: ChangeEvent<HTMLInputElement>) => setRows((current) => current.map((row, i) => i === index ? { ...row, [field]: event.target.value } : row));
   const refreshReports = async () => { if (!supabaseConfigured) return; try { setSavedReports(await listReports()); } catch (error) { const detail = error instanceof Error && error.message ? ` (${error.message})` : ""; setNotice(`Supabase 목록을 불러오지 못했습니다${detail}. SQL Editor에서 db/supabase.sql을 실행해 주세요.`); } };
@@ -52,6 +53,11 @@ export default function Home() {
   const restoreReport = (report: SavedReport) => { const data = report.report_data; setTitle(data.title); setStudent(data.student); setGoal(data.goal); setXName(data.xName); setXUnit(data.xUnit); setYName(data.yName); setYUnit(data.yUnit); setRows(data.rows); setChartType(data.chartType as ChartType); setAnalysis(data.analysis); setPrinciple(data.principle); setErrorCause(data.errorCause); setConclusion(data.conclusion); setStep(1); setShowSaved(false); setNotice("저장된 보고서를 불러왔습니다."); };
   const removeReport = async (id: string) => { if (!supabaseConfigured) return; setDbBusy(true); try { await deleteReport(id); await refreshReports(); } catch { setNotice("보고서 삭제에 실패했습니다."); } finally { setDbBusy(false); } };
   const goGraph = () => { if (points.length < 2) { setNotice("그래프를 만들려면 숫자로 된 측정값을 2개 이상 입력해 주세요."); return; } setNotice(""); setStep(2); };
+
+  useEffect(() => { const savedStudent = window.sessionStorage.getItem("탐구한장:student"); if (savedStudent) { setVerifiedStudent(savedStudent); setStudent(savedStudent); } }, []);
+  const verifyAccess = async () => { if (!supabaseConfigured) { setAccessNotice("먼저 Vercel에 Supabase 환경변수를 등록해 주세요."); return; } if (!accessCode.trim() || !accessPin.trim()) { setAccessNotice("학번과 PIN을 모두 입력해 주세요."); return; } setAccessBusy(true); setAccessNotice(""); try { const valid = await verifyStudentAccess(accessCode.trim(), accessPin.trim()); if (!valid) { setAccessNotice("학번 또는 PIN이 올바르지 않습니다."); return; } window.sessionStorage.setItem("탐구한장:student", accessCode.trim()); setVerifiedStudent(accessCode.trim()); setStudent(accessCode.trim()); void refreshReports(); } catch { setAccessNotice("학생 인증에 실패했습니다. Supabase student_access 설정을 확인해 주세요."); } finally { setAccessBusy(false); } };
+  const signOutStudent = () => { window.sessionStorage.removeItem("탐구한장:student"); setVerifiedStudent(null); setSavedReports([]); setShowSaved(false); setStep(1); };
+  if (!verifiedStudent) return <main className="lab-shell access-shell"><section className="access-card"><div className="brand-mark">탐</div><div className="eyebrow">SCIENCE EXPERIMENT REPORT</div><h1>탐구한장에<br /><em>입장하기</em></h1><p>교사에게 받은 학번과 PIN을 입력하면<br />나의 실험 보고서를 확인할 수 있어요.</p><label>학번<input value={accessCode} onChange={(event) => setAccessCode(event.target.value)} placeholder="예: 202470509" inputMode="numeric" /></label><label>PIN<input value={accessPin} onChange={(event) => setAccessPin(event.target.value)} placeholder="교사가 제공한 PIN" type="password" inputMode="numeric" /></label>{accessNotice && <p className="access-notice" role="alert">{accessNotice}</p>}<button className="primary-button access-submit" disabled={accessBusy} onClick={() => void verifyAccess()}>{accessBusy ? "확인 중..." : "탐구한장 시작하기 →"}</button><small>학생별 보고서는 입력한 학번에 연결되어 누적 저장됩니다.</small></section></main>;
 
   return <main className="lab-shell">
     <header className="topbar"><button className="brand" onClick={() => { setStep(1); setNotice(""); }}><span className="brand-mark">탐</span><span>탐구한장</span></button><span className="topbar-sub">과학 실험 데이터 시각화 · 결과지 작성</span><div className="db-actions"><button className="saved-button" onClick={() => { setShowSaved((value) => !value); void refreshReports(); }}>▤ 내 저장 보고서 <b>{savedReports.length}</b></button><span className={supabaseConfigured ? "db-status connected" : "db-status"}>{supabaseConfigured ? "DB 연결됨" : "DB 설정 필요"}</span></div></header>

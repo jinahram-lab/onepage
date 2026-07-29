@@ -27,6 +27,10 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.
 
 export const supabaseConfigured = Boolean(baseUrl && anonKey);
 
+function sessionStudentCode() {
+  return typeof window === "undefined" ? "" : window.sessionStorage.getItem("탐구한장:student") || "";
+}
+
 function endpoint(path: string) {
   if (!baseUrl || !anonKey) throw new Error("Supabase 환경변수가 설정되지 않았습니다.");
   return `${baseUrl.replace(/\/$/, "")}/rest/v1/${path}`;
@@ -36,14 +40,24 @@ function headers() {
   return { apikey: anonKey ?? "", Authorization: `Bearer ${anonKey ?? ""}`, "Content-Type": "application/json" };
 }
 
-export async function listReports() {
-  const response = await fetch(endpoint("experiment_reports?select=*&order=created_at.desc"), { headers: headers(), cache: "no-store" });
+export async function verifyStudentAccess(studentCode: string, pin: string) {
+  const response = await fetch(endpoint("rpc/verify_student_access"), { method: "POST", headers: headers(), body: JSON.stringify({ p_student_code: studentCode, p_pin: pin }) });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<boolean>;
+}
+
+export async function listReports(studentCode?: string) {
+  const currentStudent = studentCode || sessionStudentCode();
+  if (!currentStudent) return [];
+  const filter = `&student_name=eq.${encodeURIComponent(currentStudent)}`;
+  const response = await fetch(endpoint(`experiment_reports?select=*&order=created_at.desc${filter}`), { headers: headers(), cache: "no-store" });
   if (!response.ok) throw new Error(await response.text());
   return response.json() as Promise<SavedReport[]>;
 }
 
 export async function saveReport(report: Omit<SavedReport, "id" | "created_at">) {
-  const response = await fetch(endpoint("experiment_reports"), { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(report) });
+  const currentStudent = sessionStudentCode();
+  const response = await fetch(endpoint("experiment_reports"), { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(currentStudent ? { ...report, student_name: currentStudent } : report) });
   if (!response.ok) throw new Error(await response.text());
   const rows = await response.json() as SavedReport[];
   return rows[0];

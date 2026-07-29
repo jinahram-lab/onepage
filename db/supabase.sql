@@ -46,3 +46,37 @@ create policy "Anyone can save demo experiment reports" on public.experiment_rep
   for insert to anon, authenticated with check (true);
 create policy "Anyone can delete demo experiment reports" on public.experiment_reports
   for delete to anon, authenticated using (true);
+
+-- 학생별 학번 + PIN 인증용 테이블입니다. PIN은 bcrypt 해시로만 저장합니다.
+create extension if not exists pgcrypto with schema extensions;
+
+create table if not exists public.student_access (
+  student_code text primary key,
+  pin_hash text not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+alter table public.student_access enable row level security;
+revoke all on public.student_access from anon, authenticated;
+
+create or replace function public.verify_student_access(
+  p_student_code text,
+  p_pin text
+)
+returns boolean
+language sql
+security definer
+set search_path = public, extensions
+as $$
+  select exists (
+    select 1
+    from public.student_access
+    where student_code = p_student_code
+      and pin_hash = extensions.crypt(p_pin, pin_hash)
+      and active = true
+  );
+$$;
+
+grant execute on function public.verify_student_access(text, text)
+to anon, authenticated;

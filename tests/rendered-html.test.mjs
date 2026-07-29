@@ -27,6 +27,10 @@ test("keeps product metadata and Supabase schema aligned", async () => {
   assert.match(page, /function Graph/);
   assert.match(page, /실험 결과지/);
   assert.match(schema, /create table if not exists public\.student_records/);
+  assert.match(schema, /create table if not exists public\.experiment_reports/);
+  assert.match(schema, /report_data jsonb/);
   assert.match(schema, /enable row level security/);
   assert.match(schema, /auth\.uid\(\) = user_id/);
+  assert.match(page, /saveReportToDb/);
+  assert.match(page, /savedReports/);
 });

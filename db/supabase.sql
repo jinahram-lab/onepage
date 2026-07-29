@@ -33,6 +33,10 @@ create table if not exists public.experiment_reports (
   report_data jsonb not null
 );
 
+alter table public.experiment_reports add column if not exists class_number integer;
+alter table public.experiment_reports drop constraint if exists experiment_reports_class_number_check;
+alter table public.experiment_reports add constraint experiment_reports_class_number_check check (class_number between 1 and 9 or class_number is null);
+
 alter table public.experiment_reports enable row level security;
 
 -- 로그인 없이 시연할 수 있는 MVP 정책입니다. 공개 서비스에서는 Supabase Auth와
@@ -53,9 +57,12 @@ create extension if not exists pgcrypto with schema extensions;
 create table if not exists public.student_access (
   student_code text primary key,
   pin_hash text not null,
+  class_number integer not null check (class_number between 1 and 9),
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+alter table public.student_access add column if not exists class_number integer;
 
 alter table public.student_access enable row level security;
 revoke all on public.student_access from anon, authenticated;
@@ -79,6 +86,25 @@ as $$
 $$;
 
 grant execute on function public.verify_student_access(text, text)
+to anon, authenticated;
+
+create or replace function public.get_student_class(
+  p_student_code text,
+  p_pin text
+)
+returns integer
+language sql
+security definer
+set search_path = public, extensions
+as $$
+  select class_number
+  from public.student_access
+  where student_code = p_student_code
+    and pin_hash = extensions.crypt(p_pin, pin_hash)
+    and active = true;
+$$;
+
+grant execute on function public.get_student_class(text, text)
 to anon, authenticated;
 
 -- 교사 Auth 계정과 교사 전용 조회 정책입니다.

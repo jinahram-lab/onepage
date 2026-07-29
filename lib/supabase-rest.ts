@@ -3,6 +3,7 @@ export type SavedReport = {
   created_at: string;
   title: string;
   student_name: string;
+  class_number?: number | null;
   report_data: {
     title: string;
     student: string;
@@ -62,7 +63,19 @@ export async function listTeacherReports(accessToken: string) {
 export async function verifyStudentAccess(studentCode: string, pin: string) {
   const response = await fetch(endpoint("rpc/verify_student_access"), { method: "POST", headers: headers(), body: JSON.stringify({ p_student_code: studentCode, p_pin: pin }) });
   if (!response.ok) throw new Error(await response.text());
-  return response.json() as Promise<boolean>;
+  const valid = await response.json() as boolean;
+  if (!valid) return false;
+  const classResponse = await fetch(endpoint("rpc/get_student_class"), { method: "POST", headers: headers(), body: JSON.stringify({ p_student_code: studentCode, p_pin: pin }) });
+  if (!classResponse.ok) throw new Error(await classResponse.text());
+  const classNumber = await classResponse.json() as number | null;
+  if (typeof window !== "undefined" && classNumber) window.sessionStorage.setItem("탐구한장:class", String(classNumber));
+  return Boolean(classNumber);
+}
+
+export async function getStudentClass(studentCode: string, pin: string) {
+  const response = await fetch(endpoint("rpc/get_student_class"), { method: "POST", headers: headers(), body: JSON.stringify({ p_student_code: studentCode, p_pin: pin }) });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json() as Promise<number | null>;
 }
 
 export async function listReports(studentCode?: string) {
@@ -76,7 +89,8 @@ export async function listReports(studentCode?: string) {
 
 export async function saveReport(report: Omit<SavedReport, "id" | "created_at">) {
   const currentStudent = sessionStudentCode();
-  const response = await fetch(endpoint("experiment_reports"), { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(currentStudent ? { ...report, student_name: currentStudent } : report) });
+  const currentClass = typeof window === "undefined" ? null : Number(window.sessionStorage.getItem("탐구한장:class")) || null;
+  const response = await fetch(endpoint("experiment_reports"), { method: "POST", headers: { ...headers(), Prefer: "return=representation" }, body: JSON.stringify(currentStudent ? { ...report, student_name: currentStudent, class_number: currentClass } : report) });
   if (!response.ok) throw new Error(await response.text());
   const rows = await response.json() as SavedReport[];
   return rows[0];

@@ -20,6 +20,7 @@ create table if not exists public.student_records (
 );
 
 alter table public.student_records enable row level security;
+drop policy if exists "Users can manage their own student records" on public.student_records;
 create policy "Users can manage their own student records" on public.student_records
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 

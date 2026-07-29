@@ -45,7 +45,7 @@ export default function Home() {
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]); const [showSaved, setShowSaved] = useState(false); const [dbBusy, setDbBusy] = useState(false);
   const points = useMemo(() => validRows(rows), [rows]);
   const updateRow = (index: number, field: keyof Point, event: ChangeEvent<HTMLInputElement>) => setRows((current) => current.map((row, i) => i === index ? { ...row, [field]: event.target.value } : row));
-  const refreshReports = async () => { if (!supabaseConfigured) return; try { setSavedReports(await listReports()); } catch { setNotice("Supabase 목록을 불러오지 못했습니다. 환경변수와 SQL 정책을 확인해 주세요."); } };
+  const refreshReports = async () => { if (!supabaseConfigured) return; try { setSavedReports(await listReports()); } catch (error) { const detail = error instanceof Error && error.message ? ` (${error.message})` : ""; setNotice(`Supabase 목록을 불러오지 못했습니다${detail}. SQL Editor에서 db/supabase.sql을 실행해 주세요.`); } };
   useEffect(() => { void refreshReports(); }, []);
   const reportData = () => ({ title, student, goal, xName, xUnit, yName, yUnit, rows, chartType, analysis, principle, errorCause, conclusion });
   const saveReport = async () => { if (!supabaseConfigured) { setNotice("Vercel 설정에 NEXT_PUBLIC_SUPABASE_URL과 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY를 등록한 뒤 Redeploy해 주세요."); return; } if (!title.trim() || !student.trim()) { setNotice("보고서 저장을 위해 실험 제목과 학번을 입력해 주세요."); return; } setDbBusy(true); try { await saveReportToDb({ title, student_name: student, report_data: reportData() }); await refreshReports(); setNotice("보고서가 Supabase DB에 저장되었습니다."); setShowSaved(true); } catch { setNotice("보고서 저장에 실패했습니다. Supabase SQL 테이블과 RLS 정책, Vercel 환경변수를 확인해 주세요."); } finally { setDbBusy(false); } };

@@ -58,15 +58,15 @@ function Graph({ points, xName, yName, xUnit, yUnit, chartType = "line", compact
 
 export default function Home() {
   const [step, setStep] = useState(1);
-  const [title, setTitle] = useState("물이 끓을 때의 온도 측정하기");
-  const [student, setStudent] = useState("202470509");
-  const [goal, setGoal] = useState("물이 끓을 때의 온도를 측정하여 그래프로 나타낼 수 있다.");
+  const [title, setTitle] = useState("");
+  const [student, setStudent] = useState("");
+  const [goal, setGoal] = useState("");
   const [xName, setXName] = useState("시간"); const [xUnit, setXUnit] = useState("min"); const [yName, setYName] = useState("온도"); const [yUnit, setYUnit] = useState("℃");
   const [rows, setRows] = useState<Point[]>(initialRows); const [chartType, setChartType] = useState<ChartType>("line");
-  const [analysis, setAnalysis] = useState("물의 온도가 서서히 높아지다가 물이 끓기 시작하면 온도가 더 올라가지 않고 일정하게 유지된다.");
-  const [principle, setPrinciple] = useState("물이 흡수한 열에너지가 수증기로 상태 변화 하는 데 모두 사용되기 때문이다.");
-  const [errorCause, setErrorCause] = useState("온도계의 끝이 삼각 플라스크 바닥에 닿았다.");
-  const [conclusion, setConclusion] = useState("물이 흡수한 열에너지가 수증기로 상태 변화 하는 데 모두 사용되기 때문에 물을 가열할 때 물의 온도가 서서히 높아지다가 물이 끓기 시작하면 온도가 더 올라가지 않고 일정하게 유지된다.");
+  const [analysis, setAnalysis] = useState("");
+  const [principle, setPrinciple] = useState("");
+  const [errorCause, setErrorCause] = useState("");
+  const [conclusion, setConclusion] = useState("");
   const [notice, setNotice] = useState("");
   const points = useMemo(() => usableRows(rows), [rows]);
   const updateRow = (index: number, field: keyof Point, event: ChangeEvent<HTMLInputElement>) => setRows((current) => current.map((row, i) => i === index ? { ...row, [field]: event.target.value } : row));

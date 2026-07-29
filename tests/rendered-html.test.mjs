@@ -2,22 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+async function builtHtml() {
+  return readFile(new URL("../.next/server/app/index.html", import.meta.url), "utf8");
 }
 
-test("server-renders the 탐구한장 workspace", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-  const html = await response.text();
+test("Next.js builds the 탐구한장 workspace", async () => {
+  const html = await builtHtml();
   assert.match(html, /<title>탐구한장 \| 과목별 세특 초안 작성<\/title>/i);
   assert.match(html, /세특 초안 만들기/);
   assert.match(html, /학생 활동과 관찰 내용/);

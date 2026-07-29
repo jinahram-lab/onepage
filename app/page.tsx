@@ -28,7 +28,11 @@ function Graph({ points, xName, yName, xUnit, yUnit, chartType = "line", compact
     const minX = xs.length ? Math.min(...xs) : 0, maxX = xs.length ? Math.max(...xs) : 10;
     const minY = ys.length ? Math.min(...ys) : 0, maxY = ys.length ? Math.max(...ys) : 10;
     const xPad = Math.max((maxX - minX) * .08, 1), yPad = Math.max((maxY - minY) * .14, 1);
-    const x0 = minX - xPad, x1 = maxX + xPad, y0 = Math.min(0, minY - yPad), y1 = maxY + yPad;
+    // 실험 시간·측정값처럼 음수가 없는 데이터는 축을 (0, 0)에서 시작합니다.
+    // 실제 음수 데이터가 입력된 경우에만 음수 축을 허용합니다.
+    const x0 = minX >= 0 ? 0 : minX - xPad;
+    const y0 = minY >= 0 ? 0 : minY - yPad;
+    const x1 = maxX + xPad, y1 = maxY + yPad;
     const px = (x: number) => left + ((x - x0) / Math.max(x1 - x0, 1)) * chartWidth;
     const py = (y: number) => top + chartHeight - ((y - y0) / Math.max(y1 - y0, 1)) * chartHeight;
     ctx.font = `${compact ? 10 : 12}px Arial`; ctx.strokeStyle = "#e3eaf4"; ctx.fillStyle = "#718096"; ctx.lineWidth = 1;

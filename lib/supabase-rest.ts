@@ -65,11 +65,14 @@ export async function verifyStudentAccess(studentCode: string, pin: string) {
   if (!response.ok) throw new Error(await response.text());
   const valid = await response.json() as boolean;
   if (!valid) return false;
-  const classResponse = await fetch(endpoint("rpc/get_student_class"), { method: "POST", headers: headers(), body: JSON.stringify({ p_student_code: studentCode, p_pin: pin }) });
-  if (!classResponse.ok) throw new Error(await classResponse.text());
-  const classNumber = await classResponse.json() as number | null;
+  let classNumber: number | null = null;
+  try {
+    const classResponse = await fetch(endpoint("rpc/get_student_class"), { method: "POST", headers: headers(), body: JSON.stringify({ p_student_code: studentCode, p_pin: pin }) });
+    if (classResponse.ok) classNumber = await classResponse.json() as number | null;
+  } catch { /* 기존 student_access 데이터도 학번 형식으로 로그인할 수 있도록 아래에서 보완합니다. */ }
+  if (!classNumber && /^10[1-9]/.test(studentCode)) classNumber = Number(studentCode.charAt(2));
   if (typeof window !== "undefined" && classNumber) window.sessionStorage.setItem("탐구한장:class", String(classNumber));
-  return Boolean(classNumber);
+  return true;
 }
 
 export async function getStudentClass(studentCode: string, pin: string) {
